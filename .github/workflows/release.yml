@@ -47,6 +47,7 @@ jobs:
 
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -126,6 +127,10 @@ jobs:
       - name: Setup rust target
         run: rustup target add ${{ matrix.target }}
 
+      - name: Prepare build
+        run: |
+          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
+
       - name: Install dependencies
         run: pnpm install --ignore-scripts --filter=!./playgrounds/*
 
@@ -171,6 +176,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Prepare build
+        run: |
+          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
 
       # npm trusted publishing validates the caller workflow filename, so all npm publishes live here.
       # This workflow rebuilds the publish artifacts instead of depending on prepare-release.yml.
@@ -238,16 +247,7 @@ jobs:
           cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
           cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
 
-      - name: 'Version based on commit: ${{ env.INSIDERS_VERSION }}'
-        if: env.RELEASE_KIND == 'insiders'
-        run: pnpm run version-packages ${{ env.INSIDERS_VERSION }}
-
       - name: Build Tailwind CSS
-        if: env.RELEASE_KIND == 'insiders'
-        run: pnpm run build
-
-      - name: Build Tailwind CSS
-        if: env.RELEASE_KIND == 'release'
         run: pnpm run build
         env:
           FEATURES_ENV: ${{ env.FEATURES_ENV }}
@@ -266,7 +266,7 @@ jobs:
 
       - name: Publish
         run: |
-          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" pack --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks
+          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks --dry-run
           # The wasm package needs a special npm config that isn't read when pnpm --recursive is used
           # pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks; popd;
 
@@ -274,6 +274,7 @@ jobs:
         run: |
           mkdir -p release-assets
           find . -name "*.tgz" -exec mv {} release-assets/ \;
+          find release-assets/ -type f -name "tailwindcss-oxide-*" ! -name "*loong64-*" -delete
           ls -lh release-assets/
       - name: Create release
         env:
