@@ -51,6 +51,28 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            strip: strip
+            container:
+              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            strip: strip
+            download: true
+            container:
+              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            strip: llvm-strip
+            container:
+              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            strip: aarch64-linux-musl-strip
+            download: true
+            container:
+              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+          - os: ubuntu-latest
             target: loongarch64-unknown-linux-gnu
             strip: llvm-strip
             container:
@@ -76,15 +98,25 @@ jobs:
           repository: tailwindlabs/tailwindcss
           ref: ${{ env.version }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
+
+      - name: Prepare build
+        run: |
+          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
 
       - name: Use Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+
+      - name: Install gcc-arm-linux-gnueabihf
+        if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf -y
 
       # Cargo already skips downloading dependencies if they already exist
       - name: Cache cargo
@@ -127,10 +159,6 @@ jobs:
       - name: Setup rust target
         run: rustup target add ${{ matrix.target }}
 
-      - name: Prepare build
-        run: |
-          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
-
       - name: Install dependencies
         run: pnpm install --ignore-scripts --filter=!./playgrounds/*
 
@@ -145,7 +173,7 @@ jobs:
         run: ${{ matrix.strip }} ${{ env.OXIDE_LOCATION }}/*.node
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.target }}
           path: ${{ env.OXIDE_LOCATION }}/*.node
@@ -153,10 +181,17 @@ jobs:
   release:
     runs-on: macos-14
     name: Build and publish Tailwind CSS
+
+    permissions:
+      contents: write
+      # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+      id-token: write
+
     needs:
       - check
       - build
     if: needs.check.outputs.build == '1'
+
     env:
       version: ${{ needs.check.outputs.version }}
 
@@ -166,7 +201,11 @@ jobs:
           repository: tailwindlabs/tailwindcss
           ref: ${{ env.version }}
 
-      - uses: pnpm/action-setup@v4
+      - name: Prepare build
+        run: |
+          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
+
+      - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -176,10 +215,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Prepare build
-        run: |
-          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
 
       # npm trusted publishing validates the caller workflow filename, so all npm publishes live here.
       # This workflow rebuilds the publish artifacts instead of depending on prepare-release.yml.
@@ -237,17 +272,30 @@ jobs:
         run: pnpm --filter=!./playgrounds/* install
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: ${{ env.OXIDE_LOCATION }}
 
       - name: Move artifacts
         run: |
           cd ${{ env.OXIDE_LOCATION }}
+          cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
+          cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
           cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
           cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
+          cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
+          cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
+
+      - name: 'Version based on commit: ${{ env.INSIDERS_VERSION }}'
+        if: env.RELEASE_KIND == 'insiders'
+        run: pnpm run version-packages ${{ env.INSIDERS_VERSION }}
 
       - name: Build Tailwind CSS
+        if: env.RELEASE_KIND == 'insiders'
+        run: pnpm run build
+
+      - name: Build Tailwind CSS
+        if: env.RELEASE_KIND == 'release'
         run: pnpm run build
         env:
           FEATURES_ENV: ${{ env.FEATURES_ENV }}
@@ -268,7 +316,7 @@ jobs:
         run: |
           pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks --dry-run
           # The wasm package needs a special npm config that isn't read when pnpm --recursive is used
-          # pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks; popd;
+          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks --dry-run; popd;
 
       - name: Make artifacts
         run: |
@@ -276,6 +324,7 @@ jobs:
           find . -name "*.tgz" -exec mv {} release-assets/ \;
           find release-assets/ -type f -name "tailwindcss-oxide-*" ! -name "*loong64-*" -delete
           ls -lh release-assets/
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -286,3 +335,145 @@ jobs:
             --generate-notes \
             --title "${TAG_NAME}" \
             release-assets/*
+
+  publish:
+    runs-on: macos-14
+    name: Build and publish Tailwind CSS
+
+    permissions:
+      contents: write
+      # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+      id-token: write
+
+    needs:
+      - check
+      - build
+    if: needs.check.outputs.build == '1'
+
+    env:
+      version: ${{ needs.check.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: tailwindlabs/tailwindcss
+          ref: ${{ env.version }}
+
+      - name: Prepare build
+        run: |
+          wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
+          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json | xargs sed -i 's#"name": "@tailwindcss/#"name": "@loong64/#g'
+          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json | xargs sed -i 's#github.com/tailwindlabs#github.com/loong64#g'
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      # npm trusted publishing validates the caller workflow filename, so all npm publishes live here.
+      # This workflow rebuilds the publish artifacts instead of depending on prepare-release.yml.
+      - name: Resolve release metadata
+        env:
+          INPUT_CHANNEL: "release"
+        run: |
+          if [[ "${{ github.event_name }}" == "release" || "$INPUT_CHANNEL" == "release" ]]; then
+            release_channel=$(node ./scripts/release-channel.js)
+
+            echo "RELEASE_KIND=release" >> $GITHUB_ENV
+            echo "RELEASE_CHANNEL=$release_channel" >> $GITHUB_ENV
+            echo "FEATURES_ENV=stable" >> $GITHUB_ENV
+          else
+            sha_short=$(git rev-parse --short HEAD)
+
+            echo "RELEASE_KIND=insiders" >> $GITHUB_ENV
+            echo "RELEASE_CHANNEL=insiders" >> $GITHUB_ENV
+            echo "SHA_SHORT=$sha_short" >> $GITHUB_ENV
+            echo "INSIDERS_VERSION=0.0.0-insiders.$sha_short" >> $GITHUB_ENV
+          fi
+
+      # Cargo already skips downloading dependencies if they already exist
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Cache the `oxide` Rust build
+      - name: Cache oxide build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ./crates/node/*.node
+            ./crates/node/*.wasm
+            ./crates/node/index.d.ts
+            ./crates/node/index.js
+            ./crates/node/browser.js
+            ./crates/node/tailwindcss-oxide.wasi-browser.js
+            ./crates/node/tailwindcss-oxide.wasi.cjs
+            ./crates/node/wasi-worker-browser.mjs
+            ./crates/node/wasi-worker.mjs
+          key: ${{ runner.os }}-${{ matrix.target }}-oxide-${{ hashFiles('./crates/**/*') }}
+
+      - name: Setup WASM target
+        run: rustup target add wasm32-wasip1-threads
+
+      - name: Install dependencies
+        run: pnpm --filter=!./playgrounds/* install
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ env.OXIDE_LOCATION }}
+
+      - name: Move artifacts
+        run: |
+          cd ${{ env.OXIDE_LOCATION }}
+          cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
+          cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
+          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
+          cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
+          cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
+
+      - name: 'Version based on commit: ${{ env.INSIDERS_VERSION }}'
+        if: env.RELEASE_KIND == 'insiders'
+        run: pnpm run version-packages ${{ env.INSIDERS_VERSION }}
+
+      - name: Build Tailwind CSS
+        if: env.RELEASE_KIND == 'insiders'
+        run: pnpm run build
+
+      - name: Build Tailwind CSS
+        if: env.RELEASE_KIND == 'release'
+        run: pnpm run build
+        env:
+          FEATURES_ENV: ${{ env.FEATURES_ENV }}
+
+      - name: Run pre-publish optimizations scripts
+        run: node ./scripts/pre-publish-optimizations.mjs
+
+      - name: Lock pre-release versions
+        run: node ./scripts/lock-pre-release-versions.mjs
+
+      - name: Upload npm package tarballs
+        uses: actions/upload-artifact@v6
+        with:
+          name: npm-package-tarballs
+          path: dist/*.tgz
+
+      - name: Publish
+        run: |
+          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks
+          # The wasm package needs a special npm config that isn't read when pnpm --recursive is used
+          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks; popd;
