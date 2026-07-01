@@ -12,7 +12,7 @@ on:
 env:
   APP_NAME: tailwindcss-oxide
   NODE_VERSION: 24
-  PNPM_VERSION: '9.6.0'
+  PNPM_VERSION: '11.9.0'
   OXIDE_LOCATION: ./crates/node
 
 jobs:
@@ -98,6 +98,12 @@ jobs:
           repository: tailwindlabs/tailwindcss
           ref: ${{ env.version }}
 
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -105,12 +111,6 @@ jobs:
       - name: Prepare build
         run: |
           wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
-
-      - name: Use Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
 
       - name: Install gcc-arm-linux-gnueabihf
         if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
