@@ -15,31 +15,26 @@ index 5196ec6..3c8471f 100644
  [target.x86_64-pc-windows-msvc]
  rustflags = ["-C", "target-feature=+crt-static"]
 diff --git a/crates/node/package.json b/crates/node/package.json
-index 40ab706..f469839 100644
+index 40ab706..afc8944 100644
 --- a/crates/node/package.json
 +++ b/crates/node/package.json
-@@ -12,17 +12,13 @@
+@@ -12,14 +12,13 @@
      "binaryName": "tailwindcss-oxide",
      "packageName": "@tailwindcss/oxide",
      "targets": [
 -      "armv7-linux-androideabi",
 -      "aarch64-linux-android",
--      "aarch64-apple-darwin",
+       "aarch64-apple-darwin",
        "aarch64-unknown-linux-gnu",
        "aarch64-unknown-linux-musl",
        "armv7-unknown-linux-gnueabihf",
--      "x86_64-unknown-linux-musl",
--      "x86_64-unknown-freebsd",
--      "i686-pc-windows-msvc",
--      "aarch64-pc-windows-msvc",
--      "wasm32-wasip1-threads"
 +      "loongarch64-unknown-linux-gnu",
 +      "loongarch64-unknown-linux-musl",
-+      "x86_64-unknown-linux-gnu",
-+      "x86_64-unknown-linux-musl"
-     ],
-     "wasm": {
-       "initialMemory": 16384,
+       "x86_64-unknown-linux-musl",
+-      "x86_64-unknown-freebsd",
+       "i686-pc-windows-msvc",
+       "aarch64-pc-windows-msvc",
+       "wasm32-wasip1-threads"
 diff --git a/scripts/version-packages.mjs b/scripts/version-packages.mjs
 index 1641d54..37365a0 100644
 --- a/scripts/version-packages.mjs

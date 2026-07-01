@@ -50,53 +50,56 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            strip: strip -x # Must use -x on macOS. This produces larger results on linux.
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            page-size: 14
+            strip: strip -x # Must use -x on macOS. This produces larger results on linux.
+          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            strip: strip
-            container:
-              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            strip: strip
-            download: true
-            container:
-              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            strip: llvm-strip
-            container:
-              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            strip: aarch64-linux-musl-strip
-            download: true
-            container:
-              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            strip: llvm-strip
-            container:
-              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-zig
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: loongarch64-unknown-linux-gnu
-            strip: llvm-strip
-            container:
-              image: ghcr.io/loong64/napi-rs/nodejs-rust:lts-debian
+            strip-zig: true
+            build-flags: -x
           - os: ubuntu-latest
             target: loongarch64-unknown-linux-musl
-            strip: loongarch64-linux-musl-strip
-            download: true
-            container:
-              image: ghcr.io/loong64/napi-rs/nodejs-rust:lts-alpine
+            strip-zig: true
+            build-flags: -x
 
-    runs-on: ${{ matrix.os }}
     name: Build ${{ matrix.target }} (oxide)
+    runs-on: ${{ matrix.os }}
     needs:
       - check
     if: needs.check.outputs.build == '1'
     env:
       version: ${{ needs.check.outputs.version }}
-    container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -111,77 +114,58 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          package-manager-cache: false
+          cache: 'pnpm'
 
       - name: Prepare build
+        if: matrix.os == 'ubuntu-latest'
         run: |
           wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
-          cp -R crates/node/npm/linux-arm64-gnu crates/node/npm/linux-loong64-gnu 
-          cp -R crates/node/npm/linux-arm64-musl crates/node/npm/linux-loong64-musl
-          sed -i 's/aarch64/loongarch64/g' crates/node/npm/linux-loong64-musl/*
-          sed -i 's/arm64/loong64/g' crates/node/npm/linux-loong64-gnu/*
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-gnu ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu 
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-musl ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl
+          sed -i 's/aarch64/loongarch64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl/*
+          sed -i 's/arm64/loong64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu/*
 
-          rm -rf crates/node/npm/{android,darwin,freebsd,win32}-*
+          rm -rf ${{ env.OXIDE_LOCATION }}/npm/{android,freebsd}-*
 
-      - name: Install gcc-arm-linux-gnueabihf
-        if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf -y
-
-      # Cargo already skips downloading dependencies if they already exist
-      - name: Cache cargo
-        uses: actions/cache@v5
+      - uses: mlugg/setup-zig@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          version: 0.14.1
+          use-cache: false
 
-      # Cache the `oxide` Rust build
-      - name: Cache oxide build
-        uses: actions/cache@v5
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          path: |
-            ./crates/node/*.node
-            ./crates/node/*.wasm
-            ./crates/node/index.d.ts
-            ./crates/node/index.js
-            ./crates/node/browser.js
-            ./crates/node/tailwindcss-oxide.wasi-browser.js
-            ./crates/node/tailwindcss-oxide.wasi.cjs
-            ./crates/node/wasi-worker-browser.mjs
-            ./crates/node/wasi-worker.mjs
-          key: ${{ runner.os }}-${{ matrix.target }}-oxide-${{ hashFiles('./crates/**/*') }}
-
-      - name: Install Node.JS
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install Rust (Stable)
-        if: ${{ matrix.download }}
-        run: |
-          rustup default stable
+          tool: cargo-zigbuild
 
       - name: Setup rust target
         run: rustup target add ${{ matrix.target }}
 
       - name: Install dependencies
-        run: pnpm install --ignore-scripts --filter=!./playgrounds/*
+        run: pnpm install --ignore-scripts --frozen-lockfile --filter=!./playgrounds/*
 
       - name: Build release
-        run: pnpm run --filter ${{ env.OXIDE_LOCATION }} build:platform --target=${{ matrix.target }}
+        run: pnpm run --filter ${{ env.OXIDE_LOCATION }} build:platform --target=${{ matrix.target }} ${{ matrix.build-flags }}
         env:
           RUST_TARGET: ${{ matrix.target }}
           JEMALLOC_SYS_WITH_LG_PAGE: ${{ matrix.page-size }}
 
       - name: Strip debug symbols # https://github.com/rust-lang/rust/issues/46034
-        if: ${{ matrix.strip }}
-        run: ${{ matrix.strip }} ${{ env.OXIDE_LOCATION }}/*.node
+        if: ${{ matrix.strip || matrix.strip-zig }}
+        env:
+          STRIP_COMMAND: ${{ matrix.strip }}
+          STRIP_ZIG: ${{ matrix.strip-zig }}
+        run: |
+          if [ "$STRIP_ZIG" = "true" ]; then
+            for file in ${{ env.OXIDE_LOCATION }}/*.node; do
+              zig objcopy --strip-all "$file" "$file.stripped"
+              mv "$file.stripped" "$file"
+            done
+            exit 0
+          fi
+
+          eval "$STRIP_COMMAND ${{ env.OXIDE_LOCATION }}/*.node"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -215,6 +199,12 @@ jobs:
       - name: Prepare build
         run: |
           wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-gnu ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu 
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-musl ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl
+          perl -pi -e 's/arm64/loong64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu/package.json ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu/README.md
+          perl -pi -e 's/aarch64/loongarch64/g; s/arm64/loong64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl/package.json ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl/README.md
+
+          rm -rf ${{ env.OXIDE_LOCATION }}/npm/{android,freebsd}-*
 
       - uses: pnpm/action-setup@v6
         with:
@@ -248,39 +238,11 @@ jobs:
             echo "INSIDERS_VERSION=0.0.0-insiders.$sha_short" >> $GITHUB_ENV
           fi
 
-      # Cargo already skips downloading dependencies if they already exist
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      # Cache the `oxide` Rust build
-      - name: Cache oxide build
-        uses: actions/cache@v5
-        with:
-          path: |
-            ./crates/node/*.node
-            ./crates/node/*.wasm
-            ./crates/node/index.d.ts
-            ./crates/node/index.js
-            ./crates/node/browser.js
-            ./crates/node/tailwindcss-oxide.wasi-browser.js
-            ./crates/node/tailwindcss-oxide.wasi.cjs
-            ./crates/node/wasi-worker-browser.mjs
-            ./crates/node/wasi-worker.mjs
-          key: ${{ runner.os }}-${{ matrix.target }}-oxide-${{ hashFiles('./crates/**/*') }}
-
       - name: Setup WASM target
         run: rustup target add wasm32-wasip1-threads
 
       - name: Install dependencies
-        run: pnpm --filter=!./playgrounds/* install
+        run: pnpm --filter=!./playgrounds/* install --frozen-lockfile
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -290,6 +252,10 @@ jobs:
       - name: Move artifacts
         run: |
           cd ${{ env.OXIDE_LOCATION }}
+          cp bindings-x86_64-pc-windows-msvc/* ./npm/win32-x64-msvc/
+          cp bindings-aarch64-pc-windows-msvc/* ./npm/win32-arm64-msvc/
+          cp bindings-x86_64-apple-darwin/* ./npm/darwin-x64/
+          cp bindings-aarch64-apple-darwin/* ./npm/darwin-arm64/
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
@@ -300,7 +266,7 @@ jobs:
 
       - name: 'Version based on commit: ${{ env.INSIDERS_VERSION }}'
         if: env.RELEASE_KIND == 'insiders'
-        run: pnpm run version-packages ${{ env.INSIDERS_VERSION }}
+        run: pnpm run version-packages ${INSIDERS_VERSION}
 
       - name: Build Tailwind CSS
         if: env.RELEASE_KIND == 'insiders'
@@ -319,16 +285,16 @@ jobs:
         run: node ./scripts/lock-pre-release-versions.mjs
 
       - name: Upload npm package tarballs
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: npm-package-tarballs
           path: dist/*.tgz
 
       - name: Publish
         run: |
-          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks --dry-run
+          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${RELEASE_CHANNEL} --no-git-checks --dry-run
           # The wasm package needs a special npm config that isn't read when pnpm --recursive is used
-          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks --dry-run; popd;
+          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${RELEASE_CHANNEL} --no-git-checks --config.node-linker=hoisted --dry-run; popd;
 
       - name: Make artifacts
         run: |
@@ -374,8 +340,14 @@ jobs:
       - name: Prepare build
         run: |
           wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
-          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json | xargs sed -i 's#"name": "@tailwindcss/#"name": "@loong64/#g'
-          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json | xargs sed -i 's#github.com/tailwindlabs#github.com/loong64#g'
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-gnu ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu 
+          cp -R ${{ env.OXIDE_LOCATION }}/npm/linux-arm64-musl ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl
+          perl -pi -e 's/arm64/loong64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu/package.json ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-gnu/README.md
+          perl -pi -e 's/aarch64/loongarch64/g; s/arm64/loong64/g' ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl/package.json ${{ env.OXIDE_LOCATION }}/npm/linux-loong64-musl/README.md
+
+          rm -rf ${{ env.OXIDE_LOCATION }}/npm/{android,freebsd}-*
+          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json -exec sed -i "" 's#"name": "@tailwindcss/#"name": "@loong64/#g' {} +
+          find "${{ env.OXIDE_LOCATION }}/npm" -name package.json -exec sed -i "" 's#github.com/tailwindlabs#github.com/loong64#g' {} +
 
       - uses: pnpm/action-setup@v6
         with:
@@ -409,39 +381,11 @@ jobs:
             echo "INSIDERS_VERSION=0.0.0-insiders.$sha_short" >> $GITHUB_ENV
           fi
 
-      # Cargo already skips downloading dependencies if they already exist
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      # Cache the `oxide` Rust build
-      - name: Cache oxide build
-        uses: actions/cache@v5
-        with:
-          path: |
-            ./crates/node/*.node
-            ./crates/node/*.wasm
-            ./crates/node/index.d.ts
-            ./crates/node/index.js
-            ./crates/node/browser.js
-            ./crates/node/tailwindcss-oxide.wasi-browser.js
-            ./crates/node/tailwindcss-oxide.wasi.cjs
-            ./crates/node/wasi-worker-browser.mjs
-            ./crates/node/wasi-worker.mjs
-          key: ${{ runner.os }}-${{ matrix.target }}-oxide-${{ hashFiles('./crates/**/*') }}
-
       - name: Setup WASM target
         run: rustup target add wasm32-wasip1-threads
 
       - name: Install dependencies
-        run: pnpm --filter=!./playgrounds/* install
+        run: pnpm --filter=!./playgrounds/* install --frozen-lockfile
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -451,8 +395,13 @@ jobs:
       - name: Move artifacts
         run: |
           cd ${{ env.OXIDE_LOCATION }}
+          cp bindings-x86_64-pc-windows-msvc/* ./npm/win32-x64-msvc/
+          cp bindings-aarch64-pc-windows-msvc/* ./npm/win32-arm64-msvc/
+          cp bindings-x86_64-apple-darwin/* ./npm/darwin-x64/
+          cp bindings-aarch64-apple-darwin/* ./npm/darwin-arm64/
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+          cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
           cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
           cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
@@ -486,6 +435,6 @@ jobs:
 
       - name: Publish
         run: |
-          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks
+          pnpm --recursive --filter="!@tailwindcss/oxide-wasm32-wasi" publish --tag ${RELEASE_CHANNEL} --no-git-checks
           # The wasm package needs a special npm config that isn't read when pnpm --recursive is used
-          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks; popd;
+          pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${RELEASE_CHANNEL} --no-git-checks --config.node-linker=hoisted; popd;
