@@ -73,6 +73,11 @@ jobs:
             container:
               image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
           - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            strip: llvm-strip
+            container:
+              image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-zig
+          - os: ubuntu-latest
             target: loongarch64-unknown-linux-gnu
             strip: llvm-strip
             container:
@@ -98,19 +103,25 @@ jobs:
           repository: tailwindlabs/tailwindcss
           ref: ${{ env.version }}
 
-      - name: Use Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
 
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
       - name: Prepare build
         run: |
           wget -qO - https://github.com/${{ github.repository }}/raw/refs/heads/main/patch_loong64.patch | patch -p1
+          cp -R crates/node/npm/linux-arm64-gnu crates/node/npm/linux-loong64-gnu 
+          cp -R crates/node/npm/linux-arm64-musl crates/node/npm/linux-loong64-musl
+          sed -i 's/aarch64/loongarch64/g' crates/node/npm/linux-loong64-musl/*
+          sed -i 's/arm64/loong64/g' crates/node/npm/linux-loong64-gnu/*
+
+          rm -rf crates/node/npm/{android,darwin,freebsd,win32}-*
 
       - name: Install gcc-arm-linux-gnueabihf
         if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
@@ -281,6 +292,7 @@ jobs:
           cd ${{ env.OXIDE_LOCATION }}
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+          cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
           cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
           cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
