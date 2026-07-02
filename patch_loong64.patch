@@ -15,28 +15,57 @@ index 5196ec6..3c8471f 100644
  [target.x86_64-pc-windows-msvc]
  rustflags = ["-C", "target-feature=+crt-static"]
 diff --git a/crates/node/package.json b/crates/node/package.json
-index 40ab706..afc8944 100644
+index 40ab70649739..a7402dc5440c 100644
 --- a/crates/node/package.json
 +++ b/crates/node/package.json
-@@ -12,14 +12,13 @@
-     "binaryName": "tailwindcss-oxide",
-     "packageName": "@tailwindcss/oxide",
-     "targets": [
--      "armv7-linux-androideabi",
--      "aarch64-linux-android",
-       "aarch64-apple-darwin",
+@@ -18,6 +18,8 @@
        "aarch64-unknown-linux-gnu",
        "aarch64-unknown-linux-musl",
        "armv7-unknown-linux-gnueabihf",
 +      "loongarch64-unknown-linux-gnu",
 +      "loongarch64-unknown-linux-musl",
        "x86_64-unknown-linux-musl",
--      "x86_64-unknown-freebsd",
+       "x86_64-unknown-freebsd",
        "i686-pc-windows-msvc",
-       "aarch64-pc-windows-msvc",
-       "wasm32-wasip1-threads"
+@@ -66,6 +68,8 @@
+     "@tailwindcss/oxide-linux-arm-gnueabihf": "workspace:*",
+     "@tailwindcss/oxide-linux-arm64-gnu": "workspace:*",
+     "@tailwindcss/oxide-linux-arm64-musl": "workspace:*",
++    "@tailwindcss/oxide-linux-loong64-gnu": "workspace:*",
++    "@tailwindcss/oxide-linux-loong64-musl": "workspace:*",
+     "@tailwindcss/oxide-linux-x64-gnu": "workspace:*",
+     "@tailwindcss/oxide-linux-x64-musl": "workspace:*",
+     "@tailwindcss/oxide-wasm32-wasi": "workspace:*",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 3059bf744f88..1f81dafee5a1 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -127,6 +127,12 @@ importers:
+       '@tailwindcss/oxide-linux-arm64-musl':
+         specifier: workspace:*
+         version: link:npm/linux-arm64-musl
++      '@tailwindcss/oxide-linux-loong64-gnu':
++        specifier: workspace:*
++        version: link:npm/linux-loong64-gnu
++      '@tailwindcss/oxide-linux-loong64-musl':
++        specifier: workspace:*
++        version: link:npm/linux-loong64-musl
+       '@tailwindcss/oxide-linux-x64-gnu':
+         specifier: workspace:*
+         version: link:npm/linux-x64-gnu
+@@ -159,6 +165,10 @@ importers:
+ 
+   crates/node/npm/linux-arm64-musl: {}
+ 
++  crates/node/npm/linux-loong64-gnu: {}
++
++  crates/node/npm/linux-loong64-musl: {}
++
+   crates/node/npm/linux-x64-gnu: {}
+ 
+   crates/node/npm/linux-x64-musl: {}
 diff --git a/scripts/version-packages.mjs b/scripts/version-packages.mjs
-index 1641d54..37365a0 100644
+index 1641d540476f..37365a01636b 100644
 --- a/scripts/version-packages.mjs
 +++ b/scripts/version-packages.mjs
 @@ -26,6 +26,8 @@ const syncedWorkspaces = new Map([
