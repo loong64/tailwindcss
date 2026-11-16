@@ -17,7 +17,7 @@
     "tailwindcss-oxide.linux-x64-musl.node"
   ],
   "publishConfig": {
-    "provenance": true,
+    "provenance": false,
     "access": "public"
   },
   "license": "MIT",
