@@ -68,6 +68,15 @@ jobs:
             strip-zig: true
             build-flags: -x
           - os: ubuntu-latest
+            target: loongarch64-unknown-linux-gnu
+            page-size: 16
+            strip: loongarch64-linux-gnu-strip
+          - os: ubuntu-latest
+            target: loongarch64-unknown-linux-musl
+            page-size: 16
+            strip-zig: true
+            build-flags: -x
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             strip: strip
             build-flags: -x
@@ -100,6 +109,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install binutils-aarch64-linux-gnu -y
+
+      - name: Install gcc-loongarch64-linux-gnu
+        if: ${{ matrix.target == 'loongarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install binutils-loongarch64-linux-gnu gcc-13-loongarch64-linux-gnu -y
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-gcc loongarch64-linux-gnu-gcc /usr/bin/loongarch64-linux-gnu-gcc-13 100 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ar loongarch64-linux-gnu-gcc-ar /usr/bin/loongarch64-linux-gnu-gcc-ar-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-nm loongarch64-linux-gnu-gcc-nm /usr/bin/loongarch64-linux-gnu-gcc-nm-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ranlib loongarch64-linux-gnu-gcc-ranlib /usr/bin/loongarch64-linux-gnu-gcc-ranlib-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcov loongarch64-linux-gnu-gcov /usr/bin/loongarch64-linux-gnu-gcov-13
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-cpp loongarch64-linux-gnu-cpp /usr/bin/loongarch64-linux-gnu-cpp-13 100
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         if: ${{ contains(matrix.target, 'musl') }}
@@ -199,6 +222,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     name: Build and release Tailwind CSS
+    env:
+      NPM_CONFIG_REGISTRY: https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}
 
     permissions:
       contents: write # Required for creating releases
@@ -226,9 +251,11 @@ jobs:
 
       - name: Use Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.LOONGDOTJS_NPM_TOKEN }}
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}'
           package-manager-cache: false
 
       - name: Setup WASM target
@@ -253,6 +280,8 @@ jobs:
           cp bindings-armv7-linux-androideabi/* ./npm/android-arm-eabi/
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
+          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
           cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
