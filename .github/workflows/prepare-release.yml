@@ -67,6 +67,19 @@ jobs:
             container:
               image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
           - os: ubuntu-latest
+            target: loongarch64-unknown-linux-gnu
+            page-size: 16
+            strip: llvm-strip
+            container:
+              image: ghcr.io/loong64/napi-rs/nodejs-rust:lts-debian
+          - os: ubuntu-latest
+            target: loongarch64-unknown-linux-musl
+            page-size: 16
+            strip: loongarch64-linux-musl-strip
+            download: true
+            container:
+              image: ghcr.io/loong64/napi-rs/nodejs-rust:lts-alpine
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             strip: strip
             download: true
@@ -178,7 +191,7 @@ jobs:
           shell: bash
           run: |
             sudo pkg install -y -f curl node libnghttp2 npm
-            sudo npm install -g pnpm@${{ env.PNPM_VERSION }} --unsafe-perm=true
+            sudo npm install -g pnpm@${{ env.PNPM_VERSION }}
             curl -sSf https://static.rust-lang.org/rustup/archive/1.27.1/x86_64-unknown-freebsd/rustup-init --output rustup-init
             chmod +x rustup-init
             ./rustup-init -y --profile minimal
@@ -200,14 +213,16 @@ jobs:
           path: ${{ env.OXIDE_LOCATION }}/*.node
 
   prepare:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     name: Build and release Tailwind CSS
+    env:
+      NPM_CONFIG_REGISTRY: https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}
 
     permissions:
       contents: write # for softprops/action-gh-release to create GitHub release
       # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
-      id-token: write
+      # id-token: write
 
     needs:
       - build
@@ -231,10 +246,12 @@ jobs:
 
       - name: Use Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v6
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.LOONGDOTJS_NPM_TOKEN }}
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}'
 
       # Cargo already skips downloading dependencies if they already exist
       - name: Cache cargo
@@ -286,6 +303,8 @@ jobs:
           cp bindings-armv7-linux-androideabi/* ./npm/android-arm-eabi/
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
+          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
           cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
