@@ -17,7 +17,7 @@
     "tailwindcss-oxide.win32-x64-msvc.node"
   ],
   "publishConfig": {
-    "provenance": true,
+    "provenance": false,
     "access": "public"
   },
   "license": "MIT",
