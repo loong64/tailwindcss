@@ -72,6 +72,15 @@ jobs:
             strip-zig: true
             build-flags: -x
           - os: ubuntu-latest
+            target: loongarch64-unknown-linux-gnu
+            page-size: 16
+            strip: loongarch64-linux-gnu-strip
+          - os: ubuntu-latest
+            target: loongarch64-unknown-linux-musl
+            page-size: 16
+            strip-zig: true
+            build-flags: -x
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             strip: strip
             build-flags: -x
@@ -102,6 +111,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install binutils-aarch64-linux-gnu -y
+
+      - name: Install gcc-loongarch64-linux-gnu
+        if: ${{ matrix.target == 'loongarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install binutils-loongarch64-linux-gnu gcc-13-loongarch64-linux-gnu -y
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-gcc loongarch64-linux-gnu-gcc /usr/bin/loongarch64-linux-gnu-gcc-13 100 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ar loongarch64-linux-gnu-gcc-ar /usr/bin/loongarch64-linux-gnu-gcc-ar-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-nm loongarch64-linux-gnu-gcc-nm /usr/bin/loongarch64-linux-gnu-gcc-nm-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ranlib loongarch64-linux-gnu-gcc-ranlib /usr/bin/loongarch64-linux-gnu-gcc-ranlib-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcov loongarch64-linux-gnu-gcov /usr/bin/loongarch64-linux-gnu-gcov-13
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-cpp loongarch64-linux-gnu-cpp /usr/bin/loongarch64-linux-gnu-cpp-13 100
 
       # Cargo already skips downloading dependencies if they already exist
       - name: Cache cargo
@@ -203,7 +226,7 @@ jobs:
           shell: bash
           run: |
             sudo pkg install -y -f curl node libnghttp2 npm
-            sudo npm install -g pnpm@${{ env.PNPM_VERSION }} --unsafe-perm=true
+            sudo npm install -g pnpm@${{ env.PNPM_VERSION }}
             curl -sSf https://static.rust-lang.org/rustup/archive/1.27.1/x86_64-unknown-freebsd/rustup-init --output rustup-init
             chmod +x rustup-init
             ./rustup-init -y --profile minimal
@@ -225,14 +248,16 @@ jobs:
           path: ${{ env.OXIDE_LOCATION }}/*.node
 
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     name: Build and publish Tailwind CSS
+    env:
+      NPM_CONFIG_REGISTRY: https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}
 
     permissions:
       contents: write # for softprops/action-gh-release to create GitHub release
       # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
-      id-token: write
+      # id-token: write
 
     needs:
       - build
@@ -249,10 +274,12 @@ jobs:
 
       - name: Use Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v6
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.LOONGDOTJS_NPM_TOKEN }}
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}'
 
       # npm trusted publishing validates the caller workflow filename, so all npm publishes live here.
       # This workflow rebuilds the publish artifacts instead of depending on prepare-release.yml.
@@ -326,6 +353,8 @@ jobs:
           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
+          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
+          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
           cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
           cp bindings-x86_64-unknown-freebsd/* ./npm/freebsd-x64/
@@ -363,6 +392,7 @@ jobs:
           pushd crates/node/npm/wasm32-wasi; pnpm publish --tag ${{ env.RELEASE_CHANNEL }} --no-git-checks; popd;
 
       - name: Trigger Tailwind Play update
+        if: github.repository == 'tailwindlabs/tailwindcss'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.TAILWIND_PLAY_TOKEN }}
