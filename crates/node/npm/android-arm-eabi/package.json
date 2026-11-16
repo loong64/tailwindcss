@@ -17,7 +17,7 @@
     "tailwindcss-oxide.android-arm-eabi.node"
   ],
   "publishConfig": {
-    "provenance": true,
+    "provenance": false,
     "access": "public"
   },
   "license": "MIT",

@@ -10,7 +10,14 @@ const STANDALONE_BINARY = (() => {
     case 'darwin':
       return os.arch() === 'x64' ? 'tailwindcss-macos-x64' : 'tailwindcss-macos-arm64'
     case 'linux':
-      return os.arch() === 'x64' ? 'tailwindcss-linux-x64' : 'tailwindcss-linux-arm64'
+      switch (os.arch()) {
+        case 'x64':
+          return 'tailwindcss-linux-x64'
+        case 'arm64':
+          return 'tailwindcss-linux-arm64'
+        default:
+          throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
+      }
     default:
       throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
   }
