@@ -1,0 +1,269 @@
+diff --git a/.github/workflows/prepare-release.yml b/.github/workflows/prepare-release.yml
+index d1f970e02772..d62861a8ab8c 100644
+--- a/.github/workflows/prepare-release.yml
++++ b/.github/workflows/prepare-release.yml
+@@ -67,6 +67,15 @@ jobs:
+             target: aarch64-unknown-linux-musl
+             strip-zig: true
+             build-flags: -x
++          - os: ubuntu-latest
++            target: loongarch64-unknown-linux-gnu
++            page-size: 16
++            strip: loongarch64-linux-gnu-strip
++          - os: ubuntu-latest
++            target: loongarch64-unknown-linux-musl
++            page-size: 16
++            strip-zig: true
++            build-flags: -x
+           - os: ubuntu-latest
+             target: x86_64-unknown-linux-musl
+             strip: strip
+@@ -101,6 +110,20 @@ jobs:
+           sudo apt-get update
+           sudo apt-get install binutils-aarch64-linux-gnu -y
+ 
++      - name: Install gcc-loongarch64-linux-gnu
++        if: ${{ matrix.target == 'loongarch64-unknown-linux-gnu' }}
++        run: |
++          sudo apt-get update
++          sudo apt-get install binutils-loongarch64-linux-gnu gcc-13-loongarch64-linux-gnu -y
++          sudo update-alternatives \
++            --install /usr/bin/loongarch64-linux-gnu-gcc loongarch64-linux-gnu-gcc /usr/bin/loongarch64-linux-gnu-gcc-13 100 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-ar loongarch64-linux-gnu-gcc-ar /usr/bin/loongarch64-linux-gnu-gcc-ar-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-nm loongarch64-linux-gnu-gcc-nm /usr/bin/loongarch64-linux-gnu-gcc-nm-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-ranlib loongarch64-linux-gnu-gcc-ranlib /usr/bin/loongarch64-linux-gnu-gcc-ranlib-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcov loongarch64-linux-gnu-gcov /usr/bin/loongarch64-linux-gnu-gcov-13
++          sudo update-alternatives \
++            --install /usr/bin/loongarch64-linux-gnu-cpp loongarch64-linux-gnu-cpp /usr/bin/loongarch64-linux-gnu-cpp-13 100
++
+       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+         if: ${{ contains(matrix.target, 'musl') }}
+         with:
+@@ -199,6 +222,8 @@ jobs:
+     runs-on: macos-latest
+     timeout-minutes: 15
+     name: Build and release Tailwind CSS
++    env:
++      NPM_CONFIG_REGISTRY: https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}
+ 
+     permissions:
+       contents: write # Required for creating releases
+@@ -226,9 +251,11 @@ jobs:
+ 
+       - name: Use Node.js ${{ env.NODE_VERSION }}
+         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
++        env:
++          NODE_AUTH_TOKEN: ${{ secrets.LOONGDOTJS_NPM_TOKEN }}
+         with:
+           node-version: ${{ env.NODE_VERSION }}
+-          registry-url: 'https://registry.npmjs.org'
++          registry-url: 'https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}'
+           package-manager-cache: false
+ 
+       - name: Setup WASM target
+@@ -253,6 +280,8 @@ jobs:
+           cp bindings-armv7-linux-androideabi/* ./npm/android-arm-eabi/
+           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
+           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
++          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
++          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
+           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
+           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
+           cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index e93f2a508081..0e2e7f463b01 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -71,6 +71,15 @@ jobs:
+             target: aarch64-unknown-linux-musl
+             strip-zig: true
+             build-flags: -x
++          - os: ubuntu-latest
++            target: loongarch64-unknown-linux-gnu
++            page-size: 16
++            strip: loongarch64-linux-gnu-strip
++          - os: ubuntu-latest
++            target: loongarch64-unknown-linux-musl
++            page-size: 16
++            strip-zig: true
++            build-flags: -x
+           - os: ubuntu-latest
+             target: x86_64-unknown-linux-musl
+             strip: strip
+@@ -105,6 +114,20 @@ jobs:
+           sudo apt-get update
+           sudo apt-get install binutils-aarch64-linux-gnu -y
+ 
++      - name: Install gcc-loongarch64-linux-gnu
++        if: ${{ matrix.target == 'loongarch64-unknown-linux-gnu' }}
++        run: |
++          sudo apt-get update
++          sudo apt-get install binutils-loongarch64-linux-gnu gcc-13-loongarch64-linux-gnu -y
++          sudo update-alternatives \
++            --install /usr/bin/loongarch64-linux-gnu-gcc loongarch64-linux-gnu-gcc /usr/bin/loongarch64-linux-gnu-gcc-13 100 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-ar loongarch64-linux-gnu-gcc-ar /usr/bin/loongarch64-linux-gnu-gcc-ar-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-nm loongarch64-linux-gnu-gcc-nm /usr/bin/loongarch64-linux-gnu-gcc-nm-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcc-ranlib loongarch64-linux-gnu-gcc-ranlib /usr/bin/loongarch64-linux-gnu-gcc-ranlib-13 \
++            --slave /usr/bin/loongarch64-linux-gnu-gcov loongarch64-linux-gnu-gcov /usr/bin/loongarch64-linux-gnu-gcov-13
++          sudo update-alternatives \
++            --install /usr/bin/loongarch64-linux-gnu-cpp loongarch64-linux-gnu-cpp /usr/bin/loongarch64-linux-gnu-cpp-13 100
++
+       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+         if: ${{ contains(matrix.target, 'musl') }}
+         with:
+@@ -203,11 +226,13 @@ jobs:
+     runs-on: macos-latest
+     timeout-minutes: 15
+     name: Build and publish Tailwind CSS
++    env:
++      NPM_CONFIG_REGISTRY: https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}
+ 
+     permissions:
+       contents: read
+       # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+-      id-token: write
++      # id-token: write
+ 
+     needs:
+       - build
+@@ -225,9 +250,11 @@ jobs:
+ 
+       - name: Use Node.js ${{ env.NODE_VERSION }}
+         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
++        env:
++          NODE_AUTH_TOKEN: ${{ secrets.LOONGDOTJS_NPM_TOKEN }}
+         with:
+           node-version: ${{ env.NODE_VERSION }}
+-          registry-url: 'https://registry.npmjs.org'
++          registry-url: 'https://${{ vars.LOONGDOTJS_NPM_REGISTRY }}'
+           package-manager-cache: false
+ 
+       # npm trusted publishing validates the caller workflow filename, so all npm publishes live here.
+@@ -274,6 +301,8 @@ jobs:
+           cp bindings-aarch64-unknown-linux-gnu/* ./npm/linux-arm64-gnu/
+           cp bindings-aarch64-unknown-linux-musl/* ./npm/linux-arm64-musl/
+           cp bindings-armv7-unknown-linux-gnueabihf/* ./npm/linux-arm-gnueabihf/
++          cp bindings-loongarch64-unknown-linux-gnu/* ./npm/linux-loong64-gnu/
++          cp bindings-loongarch64-unknown-linux-musl/* ./npm/linux-loong64-musl/
+           cp bindings-x86_64-unknown-linux-gnu/* ./npm/linux-x64-gnu/
+           cp bindings-x86_64-unknown-linux-musl/* ./npm/linux-x64-musl/
+           cp bindings-x86_64-unknown-freebsd/* ./npm/freebsd-x64/
+diff --git a/crates/node/.cargo/config.toml b/crates/node/.cargo/config.toml
+index 5196ec61008d..3c8471ff0bf8 100644
+--- a/crates/node/.cargo/config.toml
++++ b/crates/node/.cargo/config.toml
+@@ -5,6 +5,11 @@ linker = "aarch64-linux-musl-gcc"
+ rustflags = ["-C", "target-feature=-crt-static"]
+ [target.armv7-unknown-linux-gnueabihf]
+ linker = "arm-linux-gnueabihf-gcc"
++[target.loongarch64-unknown-linux-gnu]
++linker = "loongarch64-linux-gnu-gcc"
++[target.loongarch64-unknown-linux-musl]
++linker = "loongarch64-linux-musl-gcc"
++rustflags = ["-C", "target-feature=-crt-static"]
+ # Statically link Visual Studio redistributables on Windows builds
+ [target.x86_64-pc-windows-msvc]
+ rustflags = ["-C", "target-feature=+crt-static"]
+diff --git a/crates/node/package.json b/crates/node/package.json
+index 2eff27a..a8d8193 100644
+--- a/crates/node/package.json
++++ b/crates/node/package.json
+@@ -18,6 +18,8 @@
+       "aarch64-unknown-linux-gnu",
+       "aarch64-unknown-linux-musl",
+       "armv7-unknown-linux-gnueabihf",
++      "loongarch64-unknown-linux-gnu",
++      "loongarch64-unknown-linux-musl",
+       "x86_64-unknown-linux-musl",
+       "x86_64-unknown-freebsd",
+       "i686-pc-windows-msvc",
+@@ -68,6 +70,8 @@
+     "@tailwindcss/oxide-linux-arm-gnueabihf": "workspace:*",
+     "@tailwindcss/oxide-linux-arm64-gnu": "workspace:*",
+     "@tailwindcss/oxide-linux-arm64-musl": "workspace:*",
++    "@tailwindcss/oxide-linux-loong64-gnu": "workspace:*",
++    "@tailwindcss/oxide-linux-loong64-musl": "workspace:*",
+     "@tailwindcss/oxide-linux-x64-gnu": "workspace:*",
+     "@tailwindcss/oxide-linux-x64-musl": "workspace:*",
+     "@tailwindcss/oxide-wasm32-wasi": "workspace:*",
+diff --git a/integrations/cli/index.test.ts b/integrations/cli/index.test.ts
+index f440591352a0..e98c3e7745ca 100644
+--- a/integrations/cli/index.test.ts
++++ b/integrations/cli/index.test.ts
+@@ -14,7 +14,14 @@ const STANDALONE_BINARY = (() => {
+     case 'darwin':
+       return os.arch() === 'x64' ? 'tailwindcss-macos-x64' : 'tailwindcss-macos-arm64'
+     case 'linux':
+-      return os.arch() === 'x64' ? 'tailwindcss-linux-x64' : 'tailwindcss-linux-arm64'
++      switch (os.arch()) {
++        case 'x64':
++          return 'tailwindcss-linux-x64'
++        case 'arm64':
++          return 'tailwindcss-linux-arm64'
++        default:
++          throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
++      }
+     default:
+       throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
+   }
+diff --git a/integrations/cli/standalone.test.ts b/integrations/cli/standalone.test.ts
+index f84bf45111e2..91bd2e84247e 100644
+--- a/integrations/cli/standalone.test.ts
++++ b/integrations/cli/standalone.test.ts
+@@ -10,7 +10,14 @@ const STANDALONE_BINARY = (() => {
+     case 'darwin':
+       return os.arch() === 'x64' ? 'tailwindcss-macos-x64' : 'tailwindcss-macos-arm64'
+     case 'linux':
+-      return os.arch() === 'x64' ? 'tailwindcss-linux-x64' : 'tailwindcss-linux-arm64'
++      switch (os.arch()) {
++        case 'x64':
++          return 'tailwindcss-linux-x64'
++        case 'arm64':
++          return 'tailwindcss-linux-arm64'
++        default:
++          throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
++      }
+     default:
+       throw new Error(`Unsupported platform: ${os.platform()} ${os.arch()}`)
+   }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 4beed3b4a667..26cb7304208b 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -158,6 +158,12 @@ importers:
+       '@tailwindcss/oxide-linux-arm64-musl':
+         specifier: workspace:*
+         version: link:npm/linux-arm64-musl
++      '@tailwindcss/oxide-linux-loong64-gnu':
++        specifier: workspace:*
++        version: link:npm/linux-loong64-gnu
++      '@tailwindcss/oxide-linux-loong64-musl':
++        specifier: workspace:*
++        version: link:npm/linux-loong64-musl
+       '@tailwindcss/oxide-linux-x64-gnu':
+         specifier: workspace:*
+         version: link:npm/linux-x64-gnu
+@@ -190,6 +196,10 @@ importers:
+ 
+   crates/node/npm/linux-arm64-musl: {}
+ 
++  crates/node/npm/linux-loong64-gnu: {}
++
++  crates/node/npm/linux-loong64-musl: {}
++
+   crates/node/npm/linux-x64-gnu: {}
+ 
+   crates/node/npm/linux-x64-musl: {}
+diff --git a/scripts/version-packages.mjs b/scripts/version-packages.mjs
+index 1641d540476f..37365a01636b 100644
+--- a/scripts/version-packages.mjs
++++ b/scripts/version-packages.mjs
+@@ -26,6 +26,8 @@ const syncedWorkspaces = new Map([
+       'crates/node/npm/linux-arm-gnueabihf',
+       'crates/node/npm/linux-arm64-gnu',
+       'crates/node/npm/linux-arm64-musl',
++      'crates/node/npm/linux-loong64-gnu',
++      'crates/node/npm/linux-loong64-musl',
+       'crates/node/npm/linux-x64-gnu',
+       'crates/node/npm/linux-x64-musl',
+       'crates/node/npm/wasm32-wasi',
